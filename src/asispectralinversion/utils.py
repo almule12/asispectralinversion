@@ -6,8 +6,6 @@ import scipy.interpolate
 from matplotlib.pyplot import figure
 import glob
 
-# Test comment 1:53 PM
-
 # Process one of the GLOW brightness lookup tables
 def process_brightbin(fname,plot=True):
     with open(fname) as f:
