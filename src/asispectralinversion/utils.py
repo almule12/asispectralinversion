@@ -6,6 +6,37 @@ import scipy.interpolate
 from matplotlib.pyplot import figure
 import glob
 
+# def load_lookup_tables( fname_red, fname_green, fname_blue, fname_sigp, fname_sigh, maglat, plot=True):
+# _, Qvec, E0vec, greenmat = process_brightbin(fname_green,plot=plot)
+# _, _, _, redmat = process_brightbin(fname_red,plot=plot)
+# _, _, _, bluemat = process_brightbin(fname_blue,plot=plot)
+# _, _, _, altvec, sigPmat = process_sig3dbin(fname_sigp)
+# _, _, _, _, sigHmat = process_sig3dbin(fname_sigh)
+# SigPmat = integrator(sigPmat, altvec, maglat)
+# SigHmat = integrator(sigHmat, altvec, maglat)
+# lookup_table = {
+# 	'Qvec': Qvec,
+# 	'E0vec': E0vec,
+# 	'greenmat': greenmat,
+# 	'redmat': redmat,
+# 	'bluemat': bluemat,
+# 	'altvec': altvec,
+# 	'sigPmat': sigPmat,
+# 	'sigHmat': sigHmat,
+# 	'SigPmat': SigPmat,
+# 	'SigHmat': SigHmat
+# }
+# return lookup_table
+
+# Should we add in a max blue brightness? Yes I think so add it from notebook
+# def calculate_E0_Q(redbright,greenbright,bluebright,lookup_tables,minE0=150):
+# minE0_ind = np.where(lookup_table['E0vec']<minE0)[0][0]
+# maxbluebright = ...
+# q, maxq, minq = q_interp(lookup_table['bluemat'],lookup_table['Qvec'],lookup_table['E0vec'],bluebright,minE0ind=minE0ind,maxbluebright=maxbluebright,interp='linear',plot=False):
+# e0_interp_general(testmat,Qvec,E0vec,testvec,qinvec,degen_bounds=None):
+#........
+# return Q,E0,Qmin,Qmax,E0min,E0max
+
 # Process one of the GLOW brightness lookup tables
 def process_brightbin(fname,plot=True):
     with open(fname) as f:
