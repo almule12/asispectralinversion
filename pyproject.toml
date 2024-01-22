@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "asispectralinversion"
+version = "0.0.1"
+authors = [
+  { name="Alexander Mule", email="alexander.mule.gr@Dartmouth.edu" },
+]
+description = "Invert all-sky imagery to precipitation spectrum"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: GPLv3",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/almule12/asispectralinversion"
+Issues = "https://github.com/almule12/asispectralinversion/issues"
