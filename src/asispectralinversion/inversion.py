@@ -16,28 +16,6 @@ def sig_integrator(sigmat,altvec,maglat):
     Sigmat /= np.sin(maglat*np.pi/180)
     return Sigmat
 
-# def load_lookup_tables( fname_red, fname_green, fname_blue, fname_sigp, fname_sigh, maglat, plot=True):
-# _, Qvec, E0vec, greenmat = process_brightbin(fname_green,plot=plot)
-# _, _, _, redmat = process_brightbin(fname_red,plot=plot)
-# _, _, _, bluemat = process_brightbin(fname_blue,plot=plot)
-# _, _, _, altvec, sigPmat = process_sig3dbin(fname_sigp)
-# _, _, _, _, sigHmat = process_sig3dbin(fname_sigh)
-# SigPmat = integrator(sigPmat, altvec, maglat)
-# SigHmat = integrator(sigHmat, altvec, maglat)
-# lookup_table = {
-# 	'Qvec': Qvec,
-# 	'E0vec': E0vec,
-# 	'greenmat': greenmat,
-# 	'redmat': redmat,
-# 	'bluemat': bluemat,
-# 	'altvec': altvec,
-# 	'sigPmat': sigPmat,
-# 	'sigHmat': sigHmat,
-# 	'SigPmat': SigPmat,
-# 	'SigHmat': SigHmat
-# }
-# return lookup_table
-
 # Given a set of filenames, reads in the GLOW lookup tables and packages them into a struct
 def load_lookup_tables(fname_red, fname_green, fname_blue, fname_sigp, fname_sigh, maglat, plot=True):
     # Read in: run parameters,Q vector, E0 vector, green brightness matrix from bin file
@@ -68,18 +46,10 @@ def load_lookup_tables(fname_red, fname_green, fname_blue, fname_sigp, fname_sig
     }
     return lookup_table
 
-# Should we add in a max blue brightness? Yes I think so add it from notebook
-# def calculate_E0_Q(redbright,greenbright,bluebright,lookup_tables,minE0=150):
-# minE0_ind = np.where(lookup_table['E0vec']<minE0)[0][0]
-# maxbluebright = ...
-# q, maxq, minq = q_interp(lookup_table['bluemat'],lookup_table['Qvec'],lookup_table['E0vec'],bluebright,minE0ind=minE0ind,maxbluebright=maxbluebright,interp='linear',plot=False):
-# e0_interp_general(testmat,Qvec,E0vec,testvec,qinvec,degen_bounds=None):
-#........
-# return Q,E0,Qmin,Qmax,E0min,E0max
-
 # Given RGB brightness arrays (calibrated, in Rayleighs) and a lookup table for the correct night, estimates E0 and Q
 # Setting minE0 constrains uncertainty values in Q, since for some nights some strange stuff happens at the bottom of the lookup tables.
 # We often assume that visual signatures are insignificant below 150 eV, but that parameter can be set lower or higher as desired
+# The generous option sets Q,E0 to zero instead of NaN when inversion fails but certain conditions are met (very dim pixels)
 def calculate_E0_Q(redbright,greenbright,bluebright,lookup_table,minE0=150,generous=False):
     # Save the initial shape of arrays. They will be flattened and later reshaped back to this
     shape = greenbright.shape
@@ -110,22 +80,33 @@ def calculate_E0_Q(redbright,greenbright,bluebright,lookup_table,minE0=150,gener
 
     return qvec.reshape(shape),e0vec.reshape(shape),minqvec.reshape(shape),maxqvec.reshape(shape),mine0vec.reshape(shape),maxe0vec.reshape(shape)
 
+# Given a processed lookup table dict from load_lookup_tables and arrays of  Q and E0, interpolates to calculate conductances
+# The generous option tries to make sense of zeros in Q/E0 arrays by setting conductances to their minimum values
+# Note that this function may throw an error when provided with a Q/E0 value that is nonzero but below the mininum entry in the table.
+# This should be fixed soon! -Alex
 def calculate_Sig(q,e0,lookup_table,generous=False):
+    # Saves shape of input
     shape = q.shape
-
+    
+    # Reshapes inputs to vectors
     qvec = q.reshape(-1)
     e0vec = e0.reshape(-1)
     
+    # Linearly interpolates conductances
     SigP_interp = scipy.interpolate.RegularGridInterpolator([lookup_table['E0vec'],lookup_table['Qvec']],lookup_table['SigPmat'])
     SigH_interp = scipy.interpolate.RegularGridInterpolator([lookup_table['E0vec'],lookup_table['Qvec']],lookup_table['SigHmat'])
 
+    # Initializes conductance vectors
     SigPout = np.zeros_like(qvec)
     SigHout = np.zeros_like(qvec)
 
+    # Removes nans or zeros from Q and E0 vecs that would cause the interpolator to throw an error
     mask = (np.isnan(qvec) | np.isnan(e0vec)) | ((qvec == 0) | (e0vec == 0))
 
+    # Reshapes input to the format the interpolator wants
     invec = np.asarray([e0vec[np.where(~mask)],qvec[np.where(~mask)]]).T
     
+    # Puts NaNs where the interpolator would have failed
     SigPout[np.where(mask)] = np.nan
     SigPout[np.where(~mask)] = SigP_interp(invec)
 
@@ -133,10 +114,11 @@ def calculate_Sig(q,e0,lookup_table,generous=False):
     SigHout[np.where(~mask)] = SigH_interp(invec)
 
 
+    # Tries to make sense of zeros in Q/E0 vectots
     if generous:
         SigPout[np.where( (qvec == 0) | (e0vec == 0) )] = np.amin(SigPout)
         SigHout[np.where( (qvec == 0) | (e0vec == 0) )] = np.amin(SigHout)
-    return SigPout,SigHout
+    return SigPout.reshape(shape),SigHout.reshape(shape)
 
 
 
