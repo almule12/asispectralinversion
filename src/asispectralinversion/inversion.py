@@ -6,6 +6,16 @@ import scipy.interpolate
 from matplotlib.pyplot import figure
 import glob
 
+
+# Height-integrate a 3d conductivity datacube to get a 2d conductance matrix
+# Accounts for magnetic field angle from vertical to first order
+def sig_integrator(sigmat,altvec,maglat):
+    # Cumulative trapezoidal integration
+    Sigmat = scipy.integrate.cumtrapz(sigmat,altvec/100,axis=0)[-1]
+    # First order account for magnetic field angle from vertical
+    Sigmat /= np.sin(maglat*np.pi/180)
+    return Sigmat
+
 # def load_lookup_tables( fname_red, fname_green, fname_blue, fname_sigp, fname_sigh, maglat, plot=True):
 # _, Qvec, E0vec, greenmat = process_brightbin(fname_green,plot=plot)
 # _, _, _, redmat = process_brightbin(fname_red,plot=plot)
@@ -28,6 +38,36 @@ import glob
 # }
 # return lookup_table
 
+# Given a set of filenames, reads in the GLOW lookup tables and packages them into a struct
+def load_lookup_tables(fname_red, fname_green, fname_blue, fname_sigp, fname_sigh, maglat, plot=True):
+    # Read in: run parameters,Q vector, E0 vector, green brightness matrix from bin file
+    params, Qvec, E0vec, greenmat = process_brightbin(fname_green,plot=plot)
+    # Read in red and blue brightness matrices from bin files
+    _, _, _, redmat = process_brightbin(fname_red,plot=plot)
+    _, _, _, bluemat = process_brightbin(fname_blue,plot=plot)
+    # Read in altitude vector and Pedersen conductivity datacube from bin file
+    _, _, _, altvec, sigPmat = process_sig3dbin(fname_sigp)
+    # Read in Hall conductivity datacube from bin file
+    _, _, _, _, sigHmat = process_sig3dbin(fname_sigh)
+    # Height-integrate conductivity datacubes to get conductance. First order correction for magnetic field angle.
+    SigPmat = sig_integrator(sigPmat, altvec, maglat)
+    SigHmat = sig_integrator(sigHmat, altvec, maglat)
+    # Put everything into a Python dict
+    lookup_table = {
+        'Params': params,
+    	'Qvec': Qvec,
+    	'E0vec': E0vec,
+    	'greenmat': greenmat,
+    	'redmat': redmat,
+    	'bluemat': bluemat,
+    	'altvec': altvec,
+    	'sigPmat': sigPmat,
+    	'sigHmat': sigHmat,
+    	'SigPmat': SigPmat,
+    	'SigHmat': SigHmat
+    }
+    return lookup_table
+
 # Should we add in a max blue brightness? Yes I think so add it from notebook
 # def calculate_E0_Q(redbright,greenbright,bluebright,lookup_tables,minE0=150):
 # minE0_ind = np.where(lookup_table['E0vec']<minE0)[0][0]
@@ -36,6 +76,69 @@ import glob
 # e0_interp_general(testmat,Qvec,E0vec,testvec,qinvec,degen_bounds=None):
 #........
 # return Q,E0,Qmin,Qmax,E0min,E0max
+
+# Given RGB brightness arrays (calibrated, in Rayleighs) and a lookup table for the correct night, estimates E0 and Q
+# Setting minE0 constrains uncertainty values in Q, since for some nights some strange stuff happens at the bottom of the lookup tables.
+# We often assume that visual signatures are insignificant below 150 eV, but that parameter can be set lower or higher as desired
+def calculate_E0_Q(redbright,greenbright,bluebright,lookup_table,minE0=150,generous=False):
+    # Save the initial shape of arrays. They will be flattened and later reshaped back to this
+    shape = greenbright.shape
+
+    # Reshape brightness arrays to vectors
+    redvec = redbright.reshape(-1)
+    greenvec = greenbright.reshape(-1)
+    bluevec = bluebright.reshape(-1)
+
+    # Cuts off the lookup table appropriately
+    minE0ind = np.where(lookup_table['E0vec']>minE0)[0][0]
+    
+    # Estimates Q from blue brightness, along with error bars
+    qvec, maxqvec, minqvec = q_interp(lookup_table['bluemat'],lookup_table['Qvec'],lookup_table['E0vec'],bluevec,minE0ind=minE0ind,maxbluebright='auto',interp='linear',plot=False)
+
+    # Estimates E0 from red/green ratio and estimated Q value
+    e0vec = e0_interp_general(lookup_table['redmat']/lookup_table['greenmat'],lookup_table['Qvec'],lookup_table['E0vec'],(redvec/greenvec),qvec)
+    e0vecext1 = e0_interp_general(lookup_table['redmat']/lookup_table['greenmat'],lookup_table['Qvec'],lookup_table['E0vec'],(redvec/greenvec),maxqvec)
+    e0vecext2 = e0_interp_general(lookup_table['redmat']/lookup_table['greenmat'],lookup_table['Qvec'],lookup_table['E0vec'],(redvec/greenvec),minqvec)
+
+    mine0vec = np.minimum(e0vecext1,e0vecext2)
+    maxe0vec = np.maximum(e0vecext1,e0vecext2)
+
+    if generous:
+        qvec[np.where(bluevec<np.amin(lookup_table['bluemat']))] = 0#lookup_table['E0vec'][0]
+        e0vec[np.where((redvec == 0) | (greenvec == 0))] = 0#lookup_table['E0vec'][0]
+        e0vec[np.where((redvec/greenvec) > np.amax(lookup_table['redmat']/lookup_table['greenmat']))] = 0#lookup_table['E0vec'][0]
+
+    return qvec.reshape(shape),e0vec.reshape(shape),minqvec.reshape(shape),maxqvec.reshape(shape),mine0vec.reshape(shape),maxe0vec.reshape(shape)
+
+def calculate_Sig(q,e0,lookup_table,generous=False):
+    shape = q.shape
+
+    qvec = q.reshape(-1)
+    e0vec = e0.reshape(-1)
+    
+    SigP_interp = scipy.interpolate.RegularGridInterpolator([lookup_table['E0vec'],lookup_table['Qvec']],lookup_table['SigPmat'])
+    SigH_interp = scipy.interpolate.RegularGridInterpolator([lookup_table['E0vec'],lookup_table['Qvec']],lookup_table['SigHmat'])
+
+    SigPout = np.zeros_like(qvec)
+    SigHout = np.zeros_like(qvec)
+
+    mask = (np.isnan(qvec) | np.isnan(e0vec)) | ((qvec == 0) | (e0vec == 0))
+
+    invec = np.asarray([e0vec[np.where(~mask)],qvec[np.where(~mask)]]).T
+    
+    SigPout[np.where(mask)] = np.nan
+    SigPout[np.where(~mask)] = SigP_interp(invec)
+
+    SigHout[np.where(mask)] = np.nan
+    SigHout[np.where(~mask)] = SigH_interp(invec)
+
+
+    if generous:
+        SigPout[np.where( (qvec == 0) | (e0vec == 0) )] = np.amin(SigPout)
+        SigHout[np.where( (qvec == 0) | (e0vec == 0) )] = np.amin(SigHout)
+    return SigPout,SigHout
+
+
 
 # Process one of the GLOW brightness lookup tables
 def process_brightbin(fname,plot=True):
@@ -87,16 +190,35 @@ def process_sig3dbin(fname):
 # Uses a GLOW lookup table to estimate Q from blue line brightness
 # We also specify a minimum E0 index to crop the lookup table to. 
 
-# If the lookup table is not cropped, the inversion becomes nonlinear at very
-# small values of E0 and worsens results.
-
 # Note that the uncertainty values returned are valid only under the assumption that
 # true E0 is greater than or equal to the chosen cutoff
-def q_interp(bright428,Qvec,E0vec,bluevec,minE0ind=0,maxbluebright=np.inf,interp='linear',plot=False):
+
+# maxbluebright should be kept at 'auto' unless there's a good reason to change it.
+# The Q interpolation has a built-in routine to estimate the max blue brightness that works well
+# Changing maxbluebright only affects the error bars on returned Q, not Q itself
+def q_interp(bright428,Qvec,E0vec,bluevec,minE0ind=0,maxbluebright='auto',interp='linear',plot=False):
+    # Automatically estimate where the inversion table "runs out of room" for very bright blue values
+    # This involves a recursive evaluation...
+    if maxbluebright == 'auto':
+    	# Generate 50 blue brightnesses and invert to Q
+    	# Note that this function recursively calls itself (once), when used with the 'auto' parameter for maxbluebright
+    	# This lets it determine a reasonable bound for blue brightness, above which inversions may be inaccurate
+    	testbluevec = np.linspace(0,np.amax(bright428),50)
+    	_,testmaxqvec,_ =  q_interp(bright428,Qvec,E0vec,testbluevec,minE0ind=minE0ind,maxbluebright=np.inf,interp=interp,plot=False)
+    	# Find where the upper Q bound hits a ceiling, and mark it as the maximum blue brightness where upper Q bound can accurately be determined
+    	medval = np.median(np.diff(testmaxqvec[np.where(~np.isnan(testmaxqvec))]))
+    	firstbadind = np.where((np.diff(testmaxqvec)<(medval/2)))[0][0]
+    	maxbluebright = testbluevec[firstbadind]
+    	if plot:
+    	    plt.scatter(testbluevec,testmaxqvec,color='black')
+    	    plt.scatter(testbluevec[firstbadind:],testmaxqvec[firstbadind:],color='red')
+    	    plt.title('Max possible Q, ceiling hit in red')
+    	    plt.xlabel('blue brightness')
+    	    plt.show()
+    
     # Initialize vector of Q values
     qvec = []
-    # Initialize vector keeping track of uncertainty due to the lack of knowledge of E0 
-    #uncertvec = []
+    # Initialize vectors keeping track of max/min Q values due to lack of knowledge of E0 
     maxqvec = []
     minqvec = []
 
@@ -108,12 +230,6 @@ def q_interp(bright428,Qvec,E0vec,bluevec,minE0ind=0,maxbluebright=np.inf,interp
 
     # Iterate through blue brightness data points
     for blue in bluevec:
-        # Check to see if the pixel is too bright
-        if blue>maxbluebright:
-            qvec.append(np.nan)
-            maxqvec.append(np.nan)
-            minqvec.append(np.nan)
-            continue
         # Initialize vector storing all possible values Q could take for the given blue brightness
         qcross = []
         # Initialize vector keeping track of the corresponding E0s for those Q values
@@ -124,7 +240,7 @@ def q_interp(bright428,Qvec,E0vec,bluevec,minE0ind=0,maxbluebright=np.inf,interp
                 if interp=='nearest':
                     qcross.append(Qvec[np.where(np.diff(np.sign(bright428[e0i,:]-blue)))[0][0]])
                     e0cross.append(E0vec[e0i])
-                # We interpolate between Q values
+                # We linearly interpolate between Q values
                 elif interp=='linear':
                     # The index immediately before the interpolation range 
                     guessind = np.where(np.diff(np.sign(bright428[e0i,:]-blue)))[0][0]
@@ -135,31 +251,36 @@ def q_interp(bright428,Qvec,E0vec,bluevec,minE0ind=0,maxbluebright=np.inf,interp
                     qcross.append(qi)
                     e0cross.append(E0vec[e0i])
             except:
-                # Interpolation failed, for some reason.
-                # Probably the blue brightness was too high or too low.
+            	# no Q consistent with this E0
                 pass
-            
         qcross = np.asarray(qcross)
 
         # If at least one valid solution was found
         if len(qcross)>0:
-            # We take the median Q value found
-            qvec.append(np.median(qcross))
-            # We keep track of how much error we may have accrued by taking that median value
-            #uncertvec.append(np.std(qcross))
-            maxqvec.append(np.amax(qcross))
+            # We take the Q value for very high E0
+            qvec.append(qcross[-1])
+            # We keep track of how much error we may have accrued by choosing that value
+            if blue>maxbluebright:
+            	maxqvec.append(np.nan)
+            else:
+            	maxqvec.append(np.amax(qcross))
             minqvec.append(np.amin(qcross))
-            
             # Plot the curves of possible Q solutions for each data point.
             # For large-dimensional input, this gets busy/useless/slow pretty fast!
             if plot:
                 plt.plot(qcross,e0cross)
-                plt.scatter(np.median(qcross),e0cross[np.argmin(np.abs(qcross-np.median(qcross)))],color='black',s=50)
+                plt.scatter(qcross[-1],e0cross[np.argmin(np.abs(qcross-qcross[-1]))],color='black',s=50)
         # If no good solution was found
         else:
-            qvec.append(np.nan)
-            maxqvec.append(np.nan)
-            minqvec.append(np.nan)
+            # Extremely dim pixel
+            if blue < np.amin(bright428):
+            	qvec.append(0.)
+            	maxqvec.append(Qvec[0])
+            	minqvec.append(0.)
+            else:
+            	qvec.append(np.nan)
+            	maxqvec.append(np.nan)
+            	minqvec.append(np.nan)
 
     # Plot the minimum value of E0 considered for the inversion
     if plot:
@@ -169,7 +290,12 @@ def q_interp(bright428,Qvec,E0vec,bluevec,minE0ind=0,maxbluebright=np.inf,interp
     return np.asarray(qvec),np.asarray(maxqvec),np.asarray(minqvec)
 
 
+# Interpolates E0 from a "general" lookup table, aka any function F(Qvec,E0vec).
+# We highly recommend that this be used with the table red_brightness/green_brightness.
 
+# If you specify degen_bounds = [min_E0, max_E0], they will be used in the event of a degeneracy
+# (multiple valid E0 values found). In the event that the degeneracy is not resolved, E0 will
+# be set to NaN.
 def e0_interp_general(testmat,Qvec,E0vec,testvec,qinvec,degen_bounds=None):
     e0out = []
     
@@ -183,7 +309,6 @@ def e0_interp_general(testmat,Qvec,E0vec,testvec,qinvec,degen_bounds=None):
             indvec.append(np.where(Qvec<qin)[0][-1])
         except:
             indvec.append(np.nan)
-            
     for i in range(len(testvec)):
         if np.isnan(indvec[i]):
             e0out.append(np.nan)
@@ -216,7 +341,7 @@ def e0_interp_general(testmat,Qvec,E0vec,testvec,qinvec,degen_bounds=None):
                             crossings_mask = (E0vec[crossings]>degen_bounds[-1]) | (E0vec[crossings]<degen_bounds[0])
                             #print(E0vec[crossings])
                             if len(crossings[~crossings_mask]) == 1:
-                                #print('degeneracy broken!')
+                                print('degeneracy broken!')
                                 guessind = crossings[~crossings_mask][0]
                             else:
                                 print('failed to break degeneracy')
@@ -231,16 +356,8 @@ def e0_interp_general(testmat,Qvec,E0vec,testvec,qinvec,degen_bounds=None):
             except:
                 e0i = np.nan
                 
-            # if np.isnan(e0i):
-            #     print('nan')
             e0out.append(e0i)
-            # try:
-            #     e0i = E0vec[np.where(np.diff(np.sign(curve)))[0][0]]
-            #     #print(np.diff(np.sign(curve)))
-            #     #print(np.where(np.diff(np.sign(curve)))[0])
-            # except:
-            #     e0i = np.nan
-            # e0out.append(e0i)
+            
     return np.asarray(e0out)
 
 def e0_interp_general_nearest(testmat,Qvec,E0vec,testvec,qinvec):
