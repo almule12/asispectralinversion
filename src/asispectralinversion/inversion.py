@@ -1,10 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.integrate
-import h5py
 import scipy.interpolate
-from matplotlib.pyplot import figure
-import glob
 
 
 # Height-integrate a 3d conductivity datacube to get a 2d conductance matrix
