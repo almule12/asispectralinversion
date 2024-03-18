@@ -5,7 +5,6 @@ import scipy.interpolate
 import datetime
 from skimage.restoration import denoise_wavelet, cycle_spin, estimate_sigma
 
-
 # Interpolates an image, given a grid, onto a new regular grid
 # Takes the image, the old lon/lat grid, and lon/lat vectors for the new mesh grid
 def interpolate_reggrid(im,oldlon,oldlat,newlonvec,newlatvec):
