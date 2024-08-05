@@ -36,7 +36,9 @@ def background_brightness_darkpatches(im,lon,lat,plot=True):
     # First we have to break the image up into patches:
     rows,cols = im.shape
     # Size of patches - they will be of size *step* x *step*
-    step = 5
+    #step = 5
+    step = 10
+    print('patch size='+str(step**2))
     
     # Indices to iterate through
     rowinds = np.arange(0,rows,step)
