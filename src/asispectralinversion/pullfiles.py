@@ -95,6 +95,8 @@ def genlinks(date,starttime,endtime):
     linksout = [url+'/'+link for link in linkstrim]
     return linksout,linkstrim
 
+# Pulls all DASC png imagery between <starttime> and <endtime> (UT) on the date of 
+# <date>. An example input would be download_imagery('20230314','0730','0745')
 def download_imagery(date,starttime,endtime):
     # Start hour and end hour are the same
     if starttime[:2]==endtime[:2]:
