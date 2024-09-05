@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import scipy.integrate
 import scipy.interpolate
 import glob
+import copy
 
 
 # Height-integrate a 3d conductivity datacube to get a 2d conductance matrix
@@ -81,7 +82,9 @@ def calculate_E0_Q_v2(redbright,greenbright,bluebright,inlookup_table,minE0=150,
 
     # Subtract out background brightnesses from the lookup table:
     
-    lookup_table = inlookup_table.copy()
+    # This was a shallow copy!!! We must replace it with a deep copy
+    #lookup_table = inlookup_table.copy()
+    lookup_table = copy.deepcopy(inlookup_table)
     lookup_table['redmat'] -= lookup_table['redbright_airglow'][0][0]
     lookup_table['greenmat'] -= lookup_table['greenbright_airglow'][0][0]
     lookup_table['bluemat'] -= lookup_table['bluebright_airglow'][0][0]
