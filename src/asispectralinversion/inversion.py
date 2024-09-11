@@ -183,10 +183,10 @@ def calculate_Sig(q,e0,lookup_table,generous=False):
     SigHout[np.where(~mask)] = SigH_interp(invec)
 
 
-    # Tries to make sense of zeros in Q/E0 vectots
+    # Tries to make sense of zeros in Q/E0 vectors
     if generous:
-        SigPout[np.where( (qvec == 0) | (e0vec == 0) )] = np.amin(SigPout)
-        SigHout[np.where( (qvec == 0) | (e0vec == 0) )] = np.amin(SigHout)
+        SigPout[np.where( (qvec == 0) | (e0vec == 0) )] = np.amin(lookup_table['SigPmat'])
+        SigHout[np.where( (qvec == 0) | (e0vec == 0) )] = np.amin(lookup_table['SigHmat'])
     return SigPout.reshape(shape),SigHout.reshape(shape)
 
 
