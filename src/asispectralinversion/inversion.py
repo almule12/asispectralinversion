@@ -16,7 +16,7 @@ def sig_integrator(sigmat,altvec,maglat):
     return Sigmat
 
 # Given a set of filenames, reads in the GLOW lookup tables and packages them into a struct
-def load_lookup_tables(fname_red, fname_green, fname_blue, fname_sigp, fname_sigh, maglat, plot=True):
+def load_lookup_tables(fname_red, fname_green, fname_blue, fname_sigp, fname_sigh, fname_edens, maglat, plot=True):
     # Read in: run parameters,Q vector, E0 vector, green brightness matrix from bin file
     params, Qvec, E0vec, greenmat = process_brightbin(fname_green,plot=plot)
     # Read in red and blue brightness matrices from bin files
@@ -26,6 +26,9 @@ def load_lookup_tables(fname_red, fname_green, fname_blue, fname_sigp, fname_sig
     _, _, _, altvec, sigPmat = process_sig3dbin(fname_sigp)
     # Read in Hall conductivity datacube from bin file
     _, _, _, _, sigHmat = process_sig3dbin(fname_sigh)
+    # Read in electron density datacube from bin file
+    _, _, _, _, edensmat = process_sig3dbin(fname_edens)
+    
     # Height-integrate conductivity datacubes to get conductance. First order correction for magnetic field angle.
     SigPmat = sig_integrator(sigPmat, altvec, maglat)
     SigHmat = sig_integrator(sigHmat, altvec, maglat)
@@ -41,7 +44,8 @@ def load_lookup_tables(fname_red, fname_green, fname_blue, fname_sigp, fname_sig
     	'sigPmat': sigPmat,
     	'sigHmat': sigHmat,
     	'SigPmat': SigPmat,
-    	'SigHmat': SigHmat
+    	'SigHmat': SigHmat,
+    	'edensmat': edensmat
     }
     return lookup_table
     
@@ -52,16 +56,18 @@ def load_lookup_tables_directory(directory, maglat, plot=True):
     fnameblue = glob.glob(directory+'I4278*.bin')[0]
     fnameped = glob.glob(directory+'ped3d*.bin')[0]
     fnamehall = glob.glob(directory+'hall3d*.bin')[0]
-    
+    fnameedens = glob.glob(directory+'edens*.bin')[0]
+        
     # Airglow data
     fnamereda = glob.glob(directory+'airglow/'+'I6300*.bin')[0]
     fnamegreena = glob.glob(directory+'airglow/'+'I5577*.bin')[0]
     fnamebluea = glob.glob(directory+'airglow/'+'I4278*.bin')[0]
     fnamepeda = glob.glob(directory+'airglow/'+'ped3d*.bin')[0]
     fnamehalla = glob.glob(directory+'airglow/'+'hall3d*.bin')[0]
+    fnameedensa = glob.glob(directory+'airglow/'+'edens*.bin')[0]
     
-    v = load_lookup_tables(fnamered, fnamegreen, fnameblue, fnameped, fnamehall, maglat, plot=plot)
-    va = load_lookup_tables(fnamereda, fnamegreena, fnamebluea, fnamepeda, fnamehalla, maglat, plot=False)
+    v = load_lookup_tables(fnamered, fnamegreen, fnameblue, fnameped, fnamehall, fnameedens, maglat, plot=plot)
+    va = load_lookup_tables(fnamereda, fnamegreena, fnamebluea, fnamepeda, fnamehalla, fnameedensa, maglat, plot=False)
     v['redbright_airglow'] = va['redmat']
     v['bluebright_airglow'] = va['bluemat']
     v['greenbright_airglow'] = va['greenmat']
@@ -232,7 +238,7 @@ def process_sig3dbin(fname):
         Qvec = recs[23:23+nq]
         E0vec = recs[23+nq:23+nq+ne]
         altvec = recs[23+nq+ne:23+nq+ne+nalt]
-        # Brightness data cube
+        # Data cube
         sig3d = recs[23+nq+ne+nalt:].reshape(nalt,ne,nq)
         # Return data
         return params,Qvec,E0vec,altvec,sig3d
