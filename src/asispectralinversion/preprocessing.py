@@ -28,7 +28,7 @@ def interpolate_reggrid(im,oldlon,oldlat,newlonvec,newlatvec):
 
     
 # Given an unmapped image, finds dark patches of sky to estimate background brightness and gaussian noise level
-def background_brightness_darkpatches(im,lon,lat,plot=True):
+def background_brightness_darkpatches(im,lon,lat,plot=False):
     # A gaussian function
     def gauss(x, A, x0, sigma):
         return A * np.exp(-(x - x0) ** 2 / (2 * sigma ** 2))
@@ -174,7 +174,7 @@ def background_brightness_darkpatches(im,lon,lat,plot=True):
     return cent,sig
     
     
-def background_brightness_corners(im,lon,lat,plot=True):
+def background_brightness_corners(im,lon,lat,plot=False):
     # A gaussian function
     def gauss(x, A, x0, sigma):
         return A * np.exp(-(x - x0) ** 2 / (2 * sigma ** 2))
@@ -232,7 +232,7 @@ def background_brightness_corners(im,lon,lat,plot=True):
 
 # Denoising is done through straightforward gaussian blurring - width_deg and NS_deg specify longitudinal and latitudinal gaussian widths
 # in degrees, respectively.
-def gaussian_denoise_resample(im,date,lon,lat,newmlonvec,newmlatvec,mapalt_km,width_deg,NS_deg=0,background_method='patches',plot=True): 
+def gaussian_denoise_resample(im,date,lon,lat,newmlonvec,newmlatvec,mapalt_km,width_deg,NS_deg=0,background_method='patches',plot=False): 
     # Used for setting the bounds of plots
     minlon = np.amin(lon[np.where(~np.isnan(lon))])
     maxlon = np.amax(lon[np.where(~np.isnan(lon))])
@@ -318,7 +318,7 @@ def gaussian_denoise_resample(im,date,lon,lat,newmlonvec,newmlatvec,mapalt_km,wi
 # of 50 is already probably too high, one could reduce it to 30 with no problem. There is no good reason
 # to set it <5, since that should take less than a second to run.
 
-def wavelet_denoise_resample(im,date,lon,lat,newmlonvec,newmlatvec,mapalt_km,nshifts=50,background_method='patches',plot=True):
+def wavelet_denoise_resample(im,date,lon,lat,newmlonvec,newmlatvec,mapalt_km,nshifts=50,background_method='patches',plot=False):
     # Used for setting the bounds of plots
     minlon = np.amin(lon[np.where(~np.isnan(lon))])
     maxlon = np.amax(lon[np.where(~np.isnan(lon))])
