@@ -84,7 +84,7 @@ def load_lookup_tables_directory(directory, maglat, plot=False):
 # Setting minE0 constrains uncertainty values in Q, since for some nights some strange stuff happens at the bottom of the lookup tables.
 # We often assume that visual signatures are insignificant below 150 eV, but that parameter can be set lower or higher as desired
 # The generous option sets Q,E0 to zero instead of NaN when inversion fails but certain conditions are met (very dim pixels)
-def calculate_E0_Q_v2(redbright,greenbright,bluebright,inlookup_table,minE0=150,generous=False):
+def calculate_E0_Q_v2(redbright,greenbright,bluebright,inlookup_table,minE0=150,generous=False,plot=False):
 
     # Subtract out background brightnesses from the lookup table:
     
@@ -107,38 +107,7 @@ def calculate_E0_Q_v2(redbright,greenbright,bluebright,inlookup_table,minE0=150,
     minE0ind = np.where(lookup_table['E0vec']>minE0)[0][0]
     
     # Estimates Q from blue brightness, along with error bars
-    qvec, maxqvec, minqvec = q_interp(lookup_table['bluemat'],lookup_table['Qvec'],lookup_table['E0vec'],bluevec,minE0ind=minE0ind,maxbluebright='auto',interp='linear',plot=False)
-
-    # Estimates E0 from red/green ratio and estimated Q value
-    e0vec = e0_interp_general(lookup_table['redmat']/lookup_table['greenmat'],lookup_table['Qvec'],lookup_table['E0vec'],(redvec/greenvec),qvec)
-    e0vecext1 = e0_interp_general(lookup_table['redmat']/lookup_table['greenmat'],lookup_table['Qvec'],lookup_table['E0vec'],(redvec/greenvec),maxqvec)
-    e0vecext2 = e0_interp_general(lookup_table['redmat']/lookup_table['greenmat'],lookup_table['Qvec'],lookup_table['E0vec'],(redvec/greenvec),minqvec)
-
-    mine0vec = np.minimum(e0vecext1,e0vecext2)
-    maxe0vec = np.maximum(e0vecext1,e0vecext2)
-
-    if generous:
-        qvec[np.where(bluevec<np.amin(lookup_table['bluemat']))] = 0#lookup_table['E0vec'][0]
-        e0vec[np.where((redvec == 0) | (greenvec == 0))] = 0#lookup_table['E0vec'][0]
-        e0vec[np.where((redvec/greenvec) > np.amax(lookup_table['redmat']/lookup_table['greenmat']))] = 0#lookup_table['E0vec'][0]
-
-    return qvec.reshape(shape),e0vec.reshape(shape),minqvec.reshape(shape),maxqvec.reshape(shape),mine0vec.reshape(shape),maxe0vec.reshape(shape)
-
-# Deprecated
-def calculate_E0_Q(redbright,greenbright,bluebright,lookup_table,minE0=150,generous=False):
-    # Save the initial shape of arrays. They will be flattened and later reshaped back to this
-    shape = greenbright.shape
-
-    # Reshape brightness arrays to vectors
-    redvec = redbright.reshape(-1)
-    greenvec = greenbright.reshape(-1)
-    bluevec = bluebright.reshape(-1)
-
-    # Cuts off the lookup table appropriately
-    minE0ind = np.where(lookup_table['E0vec']>minE0)[0][0]
-    
-    # Estimates Q from blue brightness, along with error bars
-    qvec, maxqvec, minqvec = q_interp(lookup_table['bluemat'],lookup_table['Qvec'],lookup_table['E0vec'],bluevec,minE0ind=minE0ind,maxbluebright='auto',interp='linear',plot=False)
+    qvec, maxqvec, minqvec = q_interp(lookup_table['bluemat'],lookup_table['Qvec'],lookup_table['E0vec'],bluevec,minE0ind=minE0ind,maxbluebright='auto',interp='linear',plot=plot)
 
     # Estimates E0 from red/green ratio and estimated Q value
     e0vec = e0_interp_general(lookup_table['redmat']/lookup_table['greenmat'],lookup_table['Qvec'],lookup_table['E0vec'],(redvec/greenvec),qvec)
