@@ -10,7 +10,7 @@ import copy
 # Accounts for magnetic field angle from vertical to first order
 def sig_integrator(sigmat,altvec,maglat):
     # Cumulative trapezoidal integration
-    Sigmat = scipy.integrate.cumtrapz(sigmat,altvec/100,axis=0)[-1]
+    Sigmat = scipy.integrate.cumulative_trapezoid(sigmat,altvec/100,axis=0)[-1]
     # First order account for magnetic field angle from vertical
     Sigmat /= np.sin(maglat*np.pi/180)
     return Sigmat
