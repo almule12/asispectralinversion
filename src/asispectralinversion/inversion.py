@@ -10,13 +10,13 @@ import copy
 # Accounts for magnetic field angle from vertical to first order
 def sig_integrator(sigmat,altvec,maglat):
     # Cumulative trapezoidal integration
-    Sigmat = scipy.integrate.cumtrapz(sigmat,altvec/100,axis=0)[-1]
+    Sigmat = scipy.integrate.cumulative_trapezoid(sigmat,altvec/100,axis=0)[-1]
     # First order account for magnetic field angle from vertical
     Sigmat /= np.sin(maglat*np.pi/180)
     return Sigmat
 
 # Given a set of filenames, reads in the GLOW lookup tables and packages them into a struct
-def load_lookup_tables(fname_red, fname_green, fname_blue, fname_sigp, fname_sigh, fname_edens, maglat, plot=True):
+def load_lookup_tables(fname_red, fname_green, fname_blue, fname_sigp, fname_sigh, fname_edens, maglat, plot=False):
     # Read in: run parameters,Q vector, E0 vector, green brightness matrix from bin file
     params, Qvec, E0vec, greenmat = process_brightbin(fname_green,plot=plot)
     # Read in red and blue brightness matrices from bin files
@@ -35,22 +35,22 @@ def load_lookup_tables(fname_red, fname_green, fname_blue, fname_sigp, fname_sig
     # Put everything into a Python dict
     lookup_table = {
         'Params': params,
-    	'Qvec': Qvec,
-    	'E0vec': E0vec,
-    	'greenmat': greenmat,
-    	'redmat': redmat,
-    	'bluemat': bluemat,
-    	'altvec': altvec,
-    	'sigPmat': sigPmat,
-    	'sigHmat': sigHmat,
-    	'SigPmat': SigPmat,
-    	'SigHmat': SigHmat,
-    	'edensmat': edensmat
+        'Qvec': Qvec,
+        'E0vec': E0vec,
+        'greenmat': greenmat,
+        'redmat': redmat,
+        'bluemat': bluemat,
+        'altvec': altvec,
+        'sigPmat': sigPmat,
+        'sigHmat': sigHmat,
+        'SigPmat': SigPmat,
+        'SigHmat': SigHmat,
+        'edensmat': edensmat
     }
     return lookup_table
     
 # Given a directory, reads in the GLOW lookup tables and packages them into a struct
-def load_lookup_tables_directory(directory, maglat, plot=True):
+def load_lookup_tables_directory(directory, maglat, plot=False):
     fnamered = glob.glob(directory+'I6300*.bin')[0]
     fnamegreen = glob.glob(directory+'I5577*.bin')[0]
     fnameblue = glob.glob(directory+'I4278*.bin')[0]
@@ -198,7 +198,7 @@ def calculate_Sig(q,e0,lookup_table,generous=False):
 
 
 # Process one of the GLOW brightness lookup tables
-def process_brightbin(fname,plot=True):
+def process_brightbin(fname,plot=False):
     with open(fname) as f:
         # Open file
         recs = np.fromfile(f, dtype='float32')
@@ -257,21 +257,21 @@ def q_interp(bright428,Qvec,E0vec,bluevec,minE0ind=0,maxbluebright='auto',interp
     # Automatically estimate where the inversion table "runs out of room" for very bright blue values
     # This involves a recursive evaluation...
     if maxbluebright == 'auto':
-    	# Generate 50 blue brightnesses and invert to Q
-    	# Note that this function recursively calls itself (once), when used with the 'auto' parameter for maxbluebright
-    	# This lets it determine a reasonable bound for blue brightness, above which inversions may be inaccurate
-    	testbluevec = np.linspace(0,np.amax(bright428),50)
-    	_,testmaxqvec,_ =  q_interp(bright428,Qvec,E0vec,testbluevec,minE0ind=minE0ind,maxbluebright=np.inf,interp=interp,plot=False)
-    	# Find where the upper Q bound hits a ceiling, and mark it as the maximum blue brightness where upper Q bound can accurately be determined
-    	medval = np.median(np.diff(testmaxqvec[np.where(~np.isnan(testmaxqvec))]))
-    	firstbadind = np.where((np.diff(testmaxqvec)<(medval/2)))[0][0]
-    	maxbluebright = testbluevec[firstbadind]
-    	if plot:
-    	    plt.scatter(testbluevec,testmaxqvec,color='black')
-    	    plt.scatter(testbluevec[firstbadind:],testmaxqvec[firstbadind:],color='red')
-    	    plt.title('Max possible Q, ceiling hit in red')
-    	    plt.xlabel('blue brightness')
-    	    plt.show()
+        # Generate 50 blue brightnesses and invert to Q
+        # Note that this function recursively calls itself (once), when used with the 'auto' parameter for maxbluebright
+        # This lets it determine a reasonable bound for blue brightness, above which inversions may be inaccurate
+        testbluevec = np.linspace(0,np.amax(bright428),50)
+        _,testmaxqvec,_ =  q_interp(bright428,Qvec,E0vec,testbluevec,minE0ind=minE0ind,maxbluebright=np.inf,interp=interp,plot=False)
+        # Find where the upper Q bound hits a ceiling, and mark it as the maximum blue brightness where upper Q bound can accurately be determined
+        medval = np.median(np.diff(testmaxqvec[np.where(~np.isnan(testmaxqvec))]))
+        firstbadind = np.where((np.diff(testmaxqvec)<(medval/2)))[0][0]
+        maxbluebright = testbluevec[firstbadind]
+        if plot:
+            plt.scatter(testbluevec,testmaxqvec,color='black')
+            plt.scatter(testbluevec[firstbadind:],testmaxqvec[firstbadind:],color='red')
+            plt.title('Max possible Q, ceiling hit in red')
+            plt.xlabel('blue brightness')
+            plt.show()
     
     # Initialize vector of Q values
     qvec = []
@@ -308,7 +308,7 @@ def q_interp(bright428,Qvec,E0vec,bluevec,minE0ind=0,maxbluebright='auto',interp
                     qcross.append(qi)
                     e0cross.append(E0vec[e0i])
             except:
-            	# no Q consistent with this E0
+                # no Q consistent with this E0
                 pass
         qcross = np.asarray(qcross)
 
@@ -318,9 +318,9 @@ def q_interp(bright428,Qvec,E0vec,bluevec,minE0ind=0,maxbluebright='auto',interp
             qvec.append(qcross[-1])
             # We keep track of how much error we may have accrued by choosing that value
             if blue>maxbluebright:
-            	maxqvec.append(np.nan)
+                maxqvec.append(np.nan)
             else:
-            	maxqvec.append(np.amax(qcross))
+                maxqvec.append(np.amax(qcross))
             minqvec.append(np.amin(qcross))
             # Plot the curves of possible Q solutions for each data point.
             # For large-dimensional input, this gets busy/useless/slow pretty fast!
@@ -331,13 +331,13 @@ def q_interp(bright428,Qvec,E0vec,bluevec,minE0ind=0,maxbluebright='auto',interp
         else:
             # Extremely dim pixel
             if blue < np.amin(bright428):
-            	qvec.append(0.)
-            	maxqvec.append(Qvec[0])
-            	minqvec.append(0.)
+                qvec.append(0.)
+                maxqvec.append(Qvec[0])
+                minqvec.append(0.)
             else:
-            	qvec.append(np.nan)
-            	maxqvec.append(np.nan)
-            	minqvec.append(np.nan)
+                qvec.append(np.nan)
+                maxqvec.append(np.nan)
+                minqvec.append(np.nan)
 
     # Plot the minimum value of E0 considered for the inversion
     if plot:

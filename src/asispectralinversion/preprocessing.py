@@ -28,7 +28,7 @@ def interpolate_reggrid(im,oldlon,oldlat,newlonvec,newlatvec):
 
     
 # Given an unmapped image, finds dark patches of sky to estimate background brightness and gaussian noise level
-def background_brightness_darkpatches(im,lon,lat,plot=True):
+def background_brightness_darkpatches(im,lon,lat,plot=False):
     # A gaussian function
     def gauss(x, A, x0, sigma):
         return A * np.exp(-(x - x0) ** 2 / (2 * sigma ** 2))
@@ -38,7 +38,7 @@ def background_brightness_darkpatches(im,lon,lat,plot=True):
     # Size of patches - they will be of size *step* x *step*
     #step = 5
     step = 10
-    print('patch size='+str(step**2))
+    # print('patch size='+str(step**2))
     
     # Indices to iterate through
     rowinds = np.arange(0,rows,step)
@@ -157,8 +157,8 @@ def background_brightness_darkpatches(im,lon,lat,plot=True):
         # Skimage noise estimate
         sig = sigguess
  
-    print('bg='+str(cent))
-    print('sig='+str(sig))
+    # print('bg='+str(cent))
+    # print('sig='+str(sig))
     
     if plot:
         # Plot the best guess gaussian
@@ -174,7 +174,7 @@ def background_brightness_darkpatches(im,lon,lat,plot=True):
     return cent,sig
     
     
-def background_brightness_corners(im,lon,lat,plot=True):
+def background_brightness_corners(im,lon,lat,plot=False):
     # A gaussian function
     def gauss(x, A, x0, sigma):
         return A * np.exp(-(x - x0) ** 2 / (2 * sigma ** 2))
@@ -208,7 +208,7 @@ def background_brightness_corners(im,lon,lat,plot=True):
     # We fit the the histogram to a gaussian curve
     [peak,cent,sig] = scipy.optimize.curve_fit(gauss,bincenters,hist,p0=[np.amax(hist),centerguess,sigguess])[0]
     #print('bg='+str(cent))
-    print('sig='+str(sig))
+    # print('sig='+str(sig))
     
     # Plot the image on a balanced colormap where white is the background brightness we found
     # Possibly useful to assess validity of results
@@ -232,7 +232,7 @@ def background_brightness_corners(im,lon,lat,plot=True):
 
 # Denoising is done through straightforward gaussian blurring - width_deg and NS_deg specify longitudinal and latitudinal gaussian widths
 # in degrees, respectively.
-def gaussian_denoise_resample(im,date,lon,lat,newmlonvec,newmlatvec,mapalt_km,width_deg,NS_deg=0,background_method='patches',plot=True): 
+def gaussian_denoise_resample(im,date,lon,lat,newmlonvec,newmlatvec,mapalt_km,width_deg,NS_deg=0,background_method='patches',plot=False): 
     # Used for setting the bounds of plots
     minlon = np.amin(lon[np.where(~np.isnan(lon))])
     maxlon = np.amax(lon[np.where(~np.isnan(lon))])
@@ -241,12 +241,13 @@ def gaussian_denoise_resample(im,date,lon,lat,newmlonvec,newmlatvec,mapalt_km,wi
     maxlat = np.amax(lat[np.where(~np.isnan(lon))])
 
     # Set the date for apex coordinates
-    A = Apex(date=date)
+    # A = Apex(date=date)
 
-    # Convert 
-    maglat, maglon = A.convert(lat.reshape(-1), np.mod(lon.reshape(-1),360), 'geo', 'apex', height=mapalt_km)
-    maglon = maglon.reshape(lon.shape)
-    maglat = maglat.reshape(lon.shape)
+    # Convert
+    maglat, maglon = apex_convert(lat, lon, 'geo', 'apex', date, height=mapalt_km)
+    # maglat, maglon = A.convert(lat.reshape(-1), np.mod(lon.reshape(-1),360), 'geo', 'apex', height=mapalt_km)
+    # maglon = maglon.reshape(lon.shape)
+    # maglat = maglat.reshape(lon.shape)
         
     # Interpolate onto regular grid        
     regim,regmaglon,regmaglat = interpolate_reggrid(im,maglon,maglat,newmlonvec,newmlatvec)
@@ -258,7 +259,7 @@ def gaussian_denoise_resample(im,date,lon,lat,newmlonvec,newmlatvec,mapalt_km,wi
         
     # Estimate sigma using skimage
     sigma_est = estimate_sigma(im[np.where(~np.isnan(lon+lat))])
-    print('skimage estimated sig='+str(sigma_est))
+    # print('skimage estimated sig='+str(sigma_est))
     
     # Grid steps for our new footpointed grid
     # Note that the new grid is very nearly Cartesian in footlat/footlon
@@ -290,9 +291,10 @@ def gaussian_denoise_resample(im,date,lon,lat,newmlonvec,newmlatvec,mapalt_km,wi
         regimblur = regim
 
     # Footpoint our new grid
-    lat110,lon110 = A.convert(regmaglat.reshape(-1), np.mod(regmaglon.reshape(-1),360), 'apex', 'geo', height=110)
-    lat110 = lat110.reshape(regmaglat.shape)
-    lon110 = lon110.reshape(regmaglon.shape)
+    lat110, lon110 = apex_convert(regmaglat, regmaglon, 'geo', 'apex', date, height=110)
+    # lat110,lon110 = A.convert(regmaglat.reshape(-1), np.mod(regmaglon.reshape(-1),360), 'apex', 'geo', height=110)
+    # lat110 = lat110.reshape(regmaglat.shape)
+    # lon110 = lon110.reshape(regmaglon.shape)
 
     if plot:
         plt.pcolor(lon,lat,im,vmin=np.amin(regimblur[np.where(~np.isnan(regimblur))]),vmax=np.amax(regimblur[np.where(~np.isnan(regimblur))]))
@@ -318,7 +320,7 @@ def gaussian_denoise_resample(im,date,lon,lat,newmlonvec,newmlatvec,mapalt_km,wi
 # of 50 is already probably too high, one could reduce it to 30 with no problem. There is no good reason
 # to set it <5, since that should take less than a second to run.
 
-def wavelet_denoise_resample(im,date,lon,lat,newmlonvec,newmlatvec,mapalt_km,nshifts=50,background_method='patches',plot=True):
+def wavelet_denoise_resample(im,date,lon,lat,newmlonvec,newmlatvec,mapalt_km,nshifts=50,background_method='patches',plot=False):
     # Used for setting the bounds of plots
     minlon = np.amin(lon[np.where(~np.isnan(lon))])
     maxlon = np.amax(lon[np.where(~np.isnan(lon))])
@@ -327,12 +329,13 @@ def wavelet_denoise_resample(im,date,lon,lat,newmlonvec,newmlatvec,mapalt_km,nsh
     maxlat = np.amax(lat[np.where(~np.isnan(lon))])
 
     # Set the date for apex coordinates
-    A = Apex(date=date)
+    # A = Apex(date=date)
 
-    # Convert 
-    maglat, maglon = A.convert(lat.reshape(-1), np.mod(lon.reshape(-1),360), 'geo', 'apex', height=mapalt_km)
-    maglon = maglon.reshape(lon.shape)
-    maglat = maglat.reshape(lon.shape)
+    # Convert
+    maglat, maglon = apex_convert(lat, lon, 'geo', 'apex', date, height=mapalt_km)
+    # maglat, maglon = A.convert(lat.reshape(-1), np.mod(lon.reshape(-1),360), 'geo', 'apex', height=mapalt_km)
+    # maglon = maglon.reshape(lon.shape)
+    # maglat = maglat.reshape(lon.shape)
         
     # Interpolate original image onto regular grid        
     regim,regmaglon,regmaglat = interpolate_reggrid(im,maglon,maglat,newmlonvec,newmlatvec)
@@ -344,7 +347,7 @@ def wavelet_denoise_resample(im,date,lon,lat,newmlonvec,newmlatvec,mapalt_km,nsh
 
     # Estimate sigma using skimage
     sigma_est = estimate_sigma(im[np.where(~np.isnan(lon+lat))])
-    print('skimage estimated sig='+str(sigma_est))
+    # print('skimage estimated sig='+str(sigma_est))
 
     # Grid steps for our new footpointed grid
     # Note that the new grid is very nearly Cartesian in footlat/footlon
@@ -367,9 +370,10 @@ def wavelet_denoise_resample(im,date,lon,lat,newmlonvec,newmlatvec,mapalt_km,nsh
     #regimblur = np.copy(regimdenoise)
     
     # Footpoint our new grid
-    lat110,lon110 = A.convert(regmaglat.reshape(-1), np.mod(regmaglon.reshape(-1),360), 'apex', 'geo', height=110)
-    lat110 = lat110.reshape(regmaglat.shape)
-    lon110 = lon110.reshape(regmaglon.shape)
+    # lat110,lon110 = A.convert(regmaglat.reshape(-1), np.mod(regmaglon.reshape(-1),360), 'apex', 'geo', height=110)
+    # lat110 = lat110.reshape(regmaglat.shape)
+    # lon110 = lon110.reshape(regmaglon.shape)
+    lat110, lon110 = apex_convert(regmaglat, regmaglon, 'apex', 'geo', date, height=110)
 
     if plot:
         plt.pcolor(lon,lat,im,vmin=np.amin(regimblur[np.where(~np.isnan(regimblur))]),vmax=np.amax(regimblur[np.where(~np.isnan(regimblur))]))
@@ -399,3 +403,25 @@ def to_rayleighs(redcutin,greencutin,bluecutin,redbg,greenbg,bluebg):
     bluecut *= 69.8
     
     return redcut,greencut,bluecut
+
+def apex_convert(lat, lon, source, dest, date, height=0):
+    A = Apex(date=date)
+    lat_flat = lat.reshape(-1)
+    lon_flat = np.mod(lon.reshape(-1), 360)
+    ids = np.where(~np.isnan(lat_flat))
+    lat_in = lat_flat[ids]
+    lon_in = lon_flat[ids]
+    if np.shape(height) == ():
+        height_in = height
+    else:
+        height_flat = height.reshape(-1)
+        height_in = height_flat[ids]
+
+    lat_out, lon_out = A.convert(lat_in, lon_in, source, dest, height=height_in)
+    lat_out_nans = np.empty(lat_flat.shape)
+    lon_out_nans = np.empty(lat_flat.shape)
+    lat_out_nans[:] = np.nan
+    lon_out_nans[:] = np.nan
+    lat_out_nans[ids] = lat_out
+    lon_out_nans[ids] = lon_out
+    return lat_out_nans.reshape(lat.shape), lon_out_nans.reshape(lon.shape)
