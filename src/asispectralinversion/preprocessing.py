@@ -291,7 +291,7 @@ def gaussian_denoise_resample(im,date,lon,lat,newmlonvec,newmlatvec,mapalt_km,wi
         regimblur = regim
 
     # Footpoint our new grid
-    lat110, lon110 = apex_convert(regmaglat, regmaglon, 'geo', 'apex', date, height=110)
+    lat110, lon110 = apex_convert(regmaglat, regmaglon, 'apex', 'geo', date, height=110)
     # lat110,lon110 = A.convert(regmaglat.reshape(-1), np.mod(regmaglon.reshape(-1),360), 'apex', 'geo', height=110)
     # lat110 = lat110.reshape(regmaglat.shape)
     # lon110 = lon110.reshape(regmaglon.shape)
